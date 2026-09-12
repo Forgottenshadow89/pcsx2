@@ -344,6 +344,7 @@ private:
 	// software sprite renderer state
 	std::vector<GSVertexSW> m_sw_vertex_buffer;
 	std::unique_ptr<GSTextureCacheSW::Texture> m_sw_texture[7 + 1];
+	GSTexture* m_output_upscale_tex[3] = {};
 	std::unique_ptr<GSVirtualAlignedClass<32>> m_sw_rasterizer;
 
 public:
@@ -376,6 +377,9 @@ public:
 
 	GSTexture* GetOutput(int i, float& scale, int& y_offset) override;
 	GSTexture* GetFeedbackOutput(float& scale) override;
+	/// 2D Upload Filter: xBR-upscales a native resolution output target before it is merged/presented.
+	GSTexture* UpscaleNativeOutput(GSTexture* t, float& scale, u32 slot);
+	void ReleaseOutputUpscaleTextures();
 	void InvalidateVideoMem(const GIFRegBITBLTBUF& BITBLTBUF, const GSVector4i& r) override;
 	void InvalidateLocalMem(const GIFRegBITBLTBUF& BITBLTBUF, const GSVector4i& r, bool clut = false) override;
 	void Move() override;

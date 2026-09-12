@@ -48,13 +48,66 @@ GSRendererHW::~GSRendererHW()
 
 void GSRendererHW::Destroy()
 {
+	ReleaseOutputUpscaleTextures();
 	g_texture_cache->RemoveAll(true, true, true);
 	GSRenderer::Destroy();
 }
 
 void GSRendererHW::PurgeTextureCache(bool sources, bool targets, bool hash_cache)
 {
+	if (targets)
+		ReleaseOutputUpscaleTextures();
 	g_texture_cache->RemoveAll(sources, targets, hash_cache);
+}
+
+void GSRendererHW::ReleaseOutputUpscaleTextures()
+{
+	for (GSTexture*& tex : m_output_upscale_tex)
+	{
+		if (tex)
+		{
+			g_gs_device->Recycle(tex);
+			tex = nullptr;
+		}
+	}
+}
+
+GSTexture* GSRendererHW::UpscaleNativeOutput(GSTexture* t, float& scale, u32 slot)
+{
+	// 2D Upload Filter: frames that ended up at native resolution (Native Scaling downscaled targets, e.g. videos and
+	// post-processed frames) would otherwise be presented as blocks of replicated pixels. Upscale them with xBR first.
+	const float upscale = GetUpscaleMultiplier();
+	const int factor = static_cast<int>(upscale);
+	if (!t || GSConfig.DirtyUploadFilter != GSDirtyUploadFilter::xBR || scale != 1.0f || t->IsDepthLike() ||
+		static_cast<float>(factor) != upscale || factor < 2)
+	{
+		return t;
+	}
+
+	const int width = t->GetWidth() * factor;
+	const int height = t->GetHeight() * factor;
+	const int max_size = static_cast<int>(g_gs_device->GetMaxTextureSize());
+	if (width > max_size || height > max_size)
+		return t;
+
+	GSTexture*& cache = m_output_upscale_tex[slot];
+	if (cache && (cache->GetWidth() != width || cache->GetHeight() != height))
+	{
+		g_gs_device->Recycle(cache);
+		cache = nullptr;
+	}
+	if (!cache)
+	{
+		cache = g_gs_device->CreateRenderTarget(width, height, GSTexture::Format::Color, false);
+		if (!cache)
+			return t;
+	}
+
+	GL_INS("HW: Upscaling native output %dx%d with xBR (slot %u)", t->GetWidth(), t->GetHeight(), slot);
+	g_gs_device->StretchRect(t, GSVector4(0.0f, 0.0f, 1.0f, 1.0f), cache,
+		GSVector4(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)), ShaderConvert::XBR_UPSCALE, Nearest);
+	scale = upscale;
+	return cache;
 }
 
 void GSRendererHW::ReadbackTextureCache()
@@ -187,6 +240,8 @@ GSTexture* GSRendererHW::GetOutput(int i, float& scale, int& y_offset)
 		{
 			t->Save(GetDrawDumpPath("%05lld_f%05lld_fr%d_%05x_%s.bmp", s_n, g_perfmon.GetFrame(), i, static_cast<int>(TEX0.TBP0), GSUtil::GetPSMName(TEX0.PSM)));
 		}
+
+		t = UpscaleNativeOutput(t, scale, static_cast<u32>(index));
 	}
 
 	return t;
@@ -213,7 +268,7 @@ GSTexture* GSRendererHW::GetFeedbackOutput(float& scale)
 	if (GSConfig.SaveFrame && GSConfig.ShouldDump(s_n, g_perfmon.GetFrame()))
 		t->Save(GetDrawDumpPath("%05lld_f%05lld_fr%d_%05x_%s.bmp", s_n, g_perfmon.GetFrame(), 3, static_cast<int>(TEX0.TBP0), GSUtil::GetPSMName(TEX0.PSM)));
 
-	return t;
+	return UpscaleNativeOutput(t, scale, 2);
 }
 
 void GSRendererHW::Lines2Sprites()

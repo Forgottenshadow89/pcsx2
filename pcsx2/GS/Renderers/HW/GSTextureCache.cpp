@@ -3005,6 +3005,15 @@ GSTextureCache::Target* GSTextureCache::ProcessTargetAfterLookup(RescaleHelper& 
 
 			g_gs_device->FilteredDownsampleTexture(dst->m_texture, tex, downsample_factor, clamp_min, dRect);
 		}
+		else if (type == RenderTarget && !preserve_scale && !is_shuffle && dst->m_downscaled && dst->m_scale == 1.0f &&
+		         !dst->m_texture->IsDepthLike() && GSConfig.DirtyUploadFilter == GSDirtyUploadFilter::xBR &&
+		         static_cast<float>(static_cast<int>(rescaler.m_scale)) == rescaler.m_scale && rescaler.m_scale >= 2.0f)
+		{
+			// 2D Upload Filter: a native resolution target (Native Scaling) is being brought back to the upscaled
+			// resolution. Use xBR instead of bilinear so 2D drawn while it was native (HUDs, videos) stays sharp.
+			GL_INS("TC: Rescale native target with xBR");
+			g_gs_device->StretchRect(dst->m_texture, FullSrcRect, tex, rescaler.m_dRect, ShaderConvert::XBR_UPSCALE, Nearest);
+		}
 		else
 		{
 			g_gs_device->StretchRectAuto(dst->m_texture, FullSrcRect, tex, rescaler.m_dRect,

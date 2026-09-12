@@ -68,10 +68,31 @@ through the framebuffer rather than pictures.
   nearest filtering, therefore CPU readbacks of uploaded data stay bit-exact (better than the
   bilinear hack, which blends).
 
+### Native Scaling paths (second commit)
+
+Dragon Quest VIII and Shadow of the Colossus (and ~all GameDB entries with `nativeScaling`) never hit
+the dirty-upload path: Native Scaling downscales targets to native resolution (`Target::m_downscaled`,
+`m_scale == 1`) for post-processing, and 2D drawn while the target is native (HUDs) or whole video frames
+end up either re-upscaled with bilinear/nearest or presented at native resolution. Two more hooks apply
+xBR there when the filter is set to xBR and the upscale factor is an integer >= 2:
+
+- `GSTextureCache::LookupDrawTarget` rescale block: a downscaled colour target being brought back to the
+  upscaled resolution (the `!preserve_scale`, non-shuffle case that upstream stretches bilinearly) is
+  upscaled with `XBR_UPSCALE` instead.
+- `GSRendererHW::GetOutput` / `GetFeedbackOutput`: if the display target is still at scale 1 while the
+  upscale multiplier is > 1, `UpscaleNativeOutput()` xBR-upscales it into a cached per-circuit render
+  target (`m_output_upscale_tex[3]`, released in `Destroy()` / `PurgeTextureCache()`) and reports the
+  upscaled scale to `GSRenderer::VSync`, so merge/present treat it like a normally upscaled frame.
+
+Note this also runs xBR over 3D content that was rendered at native resolution because of Native Scaling;
+set the filter to Nearest/Bilinear per game if that is unwanted.
+
 ### Files touched (conflict hotspots for rebases)
 
-- `pcsx2/GS/Renderers/HW/GSTextureCache.cpp` — `Target::Update()` only (filter decision, context
-  read, xBR pass, per-rect source/filter selection, `t_up` recycle).
+- `pcsx2/GS/Renderers/HW/GSTextureCache.cpp` — `Target::Update()` (filter decision, context read, xBR
+  pass, per-rect source/filter selection, `t_up` recycle) and the rescale block in `LookupDrawTarget`.
+- `pcsx2/GS/Renderers/HW/GSRendererHW.cpp` / `.h` — `UpscaleNativeOutput()`, `ReleaseOutputUpscaleTextures()`,
+  calls in `GetOutput()`/`GetFeedbackOutput()`/`Destroy()`/`PurgeTextureCache()`.
 - `pcsx2/GS/Renderers/Common/GSDevice.h` / `.cpp` — `ShaderConvert::XBR_UPSCALE`, `HasColorOutput`,
   entry point / name tables (the packed shader list is generated automatically from the enum).
 - `bin/resources/shaders/dx11/convert.fx`, `bin/resources/shaders/opengl/convert.glsl`,
