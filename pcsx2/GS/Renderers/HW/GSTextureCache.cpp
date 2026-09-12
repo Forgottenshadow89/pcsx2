@@ -104,7 +104,11 @@ void GSTextureCache::RemoveAll(bool sources, bool targets, bool hash_cache)
 	if (hash_cache)
 	{
 		for (auto it : m_hash_cache)
+		{
+			if (it.second.upscaled)
+				g_gs_device->Recycle(it.second.upscaled);
 			g_gs_device->Recycle(it.second.texture);
+		}
 
 		m_hash_cache.clear();
 		m_hash_cache_memory_usage = 0;
@@ -3004,6 +3008,15 @@ GSTextureCache::Target* GSTextureCache::ProcessTargetAfterLookup(RescaleHelper& 
 			const GSVector4 dRect = GSVector4(dst->GetUnscaledRect());
 
 			g_gs_device->FilteredDownsampleTexture(dst->m_texture, tex, downsample_factor, clamp_min, dRect);
+		}
+		else if (type == RenderTarget && !preserve_scale && !is_shuffle && dst->m_downscaled && dst->m_scale == 1.0f &&
+		         !dst->m_texture->IsDepthLike() && GSConfig.Filter2D == GSFilter2DMode::xBR &&
+		         static_cast<float>(static_cast<int>(rescaler.m_scale)) == rescaler.m_scale && rescaler.m_scale >= 2.0f)
+		{
+			// Filter 2D Images (xBR): a native resolution target (Native Scaling) is being brought back to the upscaled
+			// resolution. Use xBR instead of bilinear so 2D drawn while it was native (HUDs, videos) stays sharp.
+			GL_INS("TC: Rescale native target with xBR");
+			g_gs_device->StretchRect(dst->m_texture, FullSrcRect, tex, rescaler.m_dRect, ShaderConvert::XBR_UPSCALE, Nearest);
 		}
 		else
 		{
@@ -7163,9 +7176,63 @@ GSTextureCache::HashCacheEntry* GSTextureCache::LookupHashCache(const GIFRegTEX0
 	return &m_hash_cache.emplace(key, entry).first->second;
 }
 
+void GSTextureCache::ReleaseUpscaled2DTexture(HashCacheEntry& entry)
+{
+	if (!entry.upscaled)
+		return;
+
+	m_hash_cache_memory_usage -= entry.upscaled->GetMemUsage();
+	g_gs_device->Recycle(entry.upscaled);
+	entry.upscaled = nullptr;
+	entry.upscaled_factor = 0;
+}
+
+GSTexture* GSTextureCache::GetUpscaled2DTexture(Source* src, int factor)
+{
+	HashCacheEntry* entry = src->m_from_hash_cache;
+	if (!entry || entry->is_replacement || factor < 2 || !entry->texture ||
+		entry->texture->GetFormat() != GSTexture::Format::Color || entry->texture->GetMipmapLevels() > 1)
+	{
+		return nullptr;
+	}
+
+	// Keep the output bounded: 10M pixels (40MB) per texture, and never above the device limit. Bigger textures get a
+	// smaller factor, the sampler's bilinear filter covers the rest of the way to the internal resolution.
+	const int tw = entry->texture->GetWidth();
+	const int th = entry->texture->GetHeight();
+	const int max_size = std::min<int>(static_cast<int>(g_gs_device->GetMaxTextureSize()), 4096);
+	constexpr int max_pixels = 10 * 1024 * 1024;
+	int f = factor;
+	while (f >= 2 && (tw * f > max_size || th * f > max_size || (tw * f) * (th * f) > max_pixels))
+		f--;
+	if (f < 2)
+		return nullptr;
+
+	if (entry->upscaled && entry->upscaled_factor == f)
+		return entry->upscaled;
+
+	ReleaseUpscaled2DTexture(*entry);
+
+	const int w = tw * f;
+	const int h = th * f;
+	GSTexture* up = g_gs_device->CreateRenderTarget(w, h, GSTexture::Format::Color, false);
+	if (!up)
+		return nullptr;
+
+	GL_INS("TC: 2D texture upscale %dx%d -> %dx%d (xBR %dx)", tw, th, w, h, f);
+	g_gs_device->StretchRect(entry->texture, GSVector4(0.0f, 0.0f, 1.0f, 1.0f), up,
+		GSVector4(0.0f, 0.0f, static_cast<float>(w), static_cast<float>(h)), ShaderConvert::XBR_UPSCALE, Nearest);
+
+	entry->upscaled = up;
+	entry->upscaled_factor = static_cast<u8>(f);
+	m_hash_cache_memory_usage += up->GetMemUsage();
+	return up;
+}
+
 GSTextureCache::HashCacheMap::iterator GSTextureCache::RemoveFromHashCache(HashCacheMap::iterator it)
 {
 	HashCacheEntry& e = it->second;
+	ReleaseUpscaled2DTexture(e);
 	const u32 mem_usage = e.texture->GetMemUsage();
 	if (e.is_replacement)
 		m_hash_cache_replacement_memory_usage -= mem_usage;
@@ -7940,8 +8007,36 @@ void GSTextureCache::Target::Update(bool cannot_scale)
 		return;
 	}
 
-	const GSVector4i t_offset(total_rect.xyxy());
-	const GSVector4i t_size(total_rect - t_offset);
+	// Bilinear filtering this is probably not a good thing, at least in native, but upscaling Nearest can be gross and messy.
+	// It's needed for depth, though.. filtering depth doesn't make much sense, but SMT3 needs it..
+	const bool upscaled = (m_scale != 1.0f);
+	const bool is_depth = m_type == DepthStencil;
+	const bool override_linear = (upscaled && GSConfig.UserHacks_BilinearHack == GSBilinearDirtyMode::ForceBilinear);
+	const bool linear = (upscaled && ((!is_depth && GSConfig.UserHacks_BilinearHack != GSBilinearDirtyMode::ForceNearest) || is_depth));
+
+	// Filter 2D Images: images the CPU writes straight into a render target (FMVs, pre-rendered backgrounds,
+	// software-rendered 2D) are stretched with nearest by default since 2b49614df, which leaves them as blocks of
+	// replicated pixels when upscaling. Bilinear/xBR filter every >= 16bpp dirty rect instead (4/8bpp uploads are
+	// normally indexed data/CLUTs being moved around rather than images). Independent from the Bilinear Dirty Upscale
+	// hardware fix: when this option is on, it decides the filter for those rects.
+	const bool filter_2d_uploads = upscaled && !is_depth && GSConfig.Filter2D != GSFilter2DMode::Off;
+	const int int_scale = static_cast<int>(m_scale);
+	const bool want_xbr = filter_2d_uploads && GSConfig.Filter2D == GSFilter2DMode::xBR &&
+	                      static_cast<float>(int_scale) == m_scale && int_scale >= 2;
+
+	// xBR looks at a 2 texel neighbourhood, so read a little extra around the dirty area (from local memory) to avoid
+	// seams where images are uploaded in strips across several updates. The extra pixels are only used as context.
+	GSVector4i read_area = total_rect;
+	if (want_xbr)
+	{
+		const GSVector2i& bs = GSLocalMemory::m_psm[m_TEX0.PSM].bs;
+		read_area = GSVector4i(total_rect.x - 2, total_rect.y - 2, total_rect.z + 2, total_rect.w + 2)
+		                .ralign<Align_Outside>(bs)
+		                .rintersect(GSVector4i::loadh(m_unscaled_size));
+	}
+
+	const GSVector4i t_offset(read_area.xyxy());
+	const GSVector4i t_size(read_area - t_offset);
 	const GSVector4 t_sizef(t_size.zwzw());
 
 	// This'll leave undefined data in pixels that we're not reading from... shouldn't hurt anything.
@@ -7959,13 +8054,6 @@ void GSTextureCache::Target::Update(bool cannot_scale)
 	TEXA.AEM = 0;
 	TEXA.TA0 = 0;
 	TEXA.TA1 = 0x80;
-
-	// Bilinear filtering this is probably not a good thing, at least in native, but upscaling Nearest can be gross and messy.
-	// It's needed for depth, though.. filtering depth doesn't make much sense, but SMT3 needs it..
-	const bool upscaled = (m_scale != 1.0f);
-	const bool is_depth = m_type == DepthStencil;
-	const bool override_linear = (upscaled && GSConfig.UserHacks_BilinearHack == GSBilinearDirtyMode::ForceBilinear);
-	const bool linear = (upscaled && ((!is_depth && GSConfig.UserHacks_BilinearHack != GSBilinearDirtyMode::ForceNearest) || is_depth));
 
 	GSDevice::MultiStretchRect* drects = static_cast<GSDevice::MultiStretchRect*>(
 		alloca(sizeof(GSDevice::MultiStretchRect) * static_cast<u32>(m_dirty.size())));
@@ -7992,7 +8080,14 @@ void GSTextureCache::Target::Update(bool cannot_scale)
 
 		transferring_alpha |= m_dirty[i].rgba.c.a;
 
-		const GSVector4i read_r = m_dirty.GetDirtyRect(i, m_TEX0, total_rect, true);
+		GSVector4i read_r = m_dirty.GetDirtyRect(i, m_TEX0, total_rect, true);
+		if (want_xbr)
+		{
+			const GSVector2i& bs = GSLocalMemory::m_psm[m_TEX0.PSM].bs;
+			read_r = GSVector4i(read_r.x - 2, read_r.y - 2, read_r.z + 2, read_r.w + 2)
+			             .ralign<Align_Outside>(bs)
+			             .rintersect(read_area);
+		}
 		const GSVector4i t_r(read_r - t_offset);
 		if (mapped)
 		{
@@ -8029,7 +8124,13 @@ void GSTextureCache::Target::Update(bool cannot_scale)
 		drect.src = t;
 		drect.src_rect = GSVector4(update_r - t_offset) / t_sizef;
 		drect.dst_rect = GSVector4(update_r) * GSVector4(m_scale);
-		drect.filter = BilnIf(linear && (is_depth || m_dirty[i].req_linear || override_linear));
+		// Filter 2D Images: xBR rects are re-pointed at the pre-upscaled texture after the staging texture has been
+		// filled (or fall back to bilinear if it can't be created); Bilinear mode just uses the bilinear stretch.
+		const bool filter_2d_rect = filter_2d_uploads && GSLocalMemory::m_psm[m_dirty[i].psm].trbpp >= 16;
+		const bool xbr_rect = want_xbr && filter_2d_rect;
+		drect.filter = BilnIf((linear && (is_depth || m_dirty[i].req_linear || override_linear)) || (filter_2d_rect && !xbr_rect));
+		if (xbr_rect)
+			drect.src = nullptr;
 
 		// Copy the new GS memory content into the destination texture.
 		if (m_type == RenderTarget)
@@ -8047,6 +8148,54 @@ void GSTextureCache::Target::Update(bool cannot_scale)
 
 	if (mapped)
 		t->Unmap();
+
+	// Filter 2D Images (xBR): upscale the whole staging texture once, then let the per-rect copies below sample the
+	// pre-upscaled result 1:1, which keeps the write mask and alpha correction handling untouched.
+	GSTexture* t_up = nullptr;
+	if (want_xbr && ndrects > 0)
+	{
+		bool any_xbr = false;
+		for (u32 i = 0; i < ndrects; i++)
+			any_xbr |= (drects[i].src == nullptr);
+
+		if (any_xbr)
+		{
+			const int up_w = t_size.z * int_scale;
+			const int up_h = t_size.w * int_scale;
+			const int max_size = static_cast<int>(g_gs_device->GetMaxTextureSize());
+			if (up_w <= max_size && up_h <= max_size)
+			{
+				t_up = g_gs_device->CreateRenderTarget(up_w, up_h, GSTexture::Format::Color, false);
+				if (t_up)
+				{
+					GL_INS("TC: Dirty upload xBR %dx%d -> %dx%d", t_size.z, t_size.w, up_w, up_h);
+					g_gs_device->StretchRect(t, GSVector4(0.0f, 0.0f, 1.0f, 1.0f), t_up,
+						GSVector4(0.0f, 0.0f, static_cast<float>(up_w), static_cast<float>(up_h)),
+						ShaderConvert::XBR_UPSCALE, Nearest);
+				}
+			}
+
+			for (u32 i = 0; i < ndrects; i++)
+			{
+				if (drects[i].src != nullptr)
+					continue;
+
+				if (t_up)
+				{
+					drects[i].src = t_up;
+				}
+				else
+				{
+					// Couldn't pre-upscale (texture would be too large), fall back to bilinear.
+					drects[i].src = t;
+					drects[i].filter = Biln;
+				}
+			}
+
+			// Rect order is preserved on purpose (later uploads overwrite earlier ones), the backends start a new batch
+			// whenever the source texture changes.
+		}
+	}
 
 	if (ndrects > 0)
 	{
@@ -8085,6 +8234,8 @@ void GSTextureCache::Target::Update(bool cannot_scale)
 		m_alpha_range |= alpha_minmax.first != alpha_minmax.second;
 	}
 	g_gs_device->Recycle(t);
+	if (t_up)
+		g_gs_device->Recycle(t_up);
 
 	if (m_type == DepthStencil && g_texture_cache->GetTemporaryZ() != nullptr)
 	{
@@ -8671,6 +8822,7 @@ void GSTextureCache::InjectHashCacheTexture(const HashCacheKey& key, GSTexture* 
 		m_hash_cache_replacement_memory_usage -= it->second.texture->GetMemUsage();
 
 	it->second.is_replacement = true;
+	ReleaseUpscaled2DTexture(it->second);
 	m_src.SwapTexture(it->second.texture, tex);
 	g_gs_device->Recycle(it->second.texture);
 	it->second.texture = tex;

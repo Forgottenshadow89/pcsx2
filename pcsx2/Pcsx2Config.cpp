@@ -832,6 +832,7 @@ bool Pcsx2Config::GSOptions::OptionsAreEqual(const GSOptions& right) const
 
 		OpEqu(AccurateBlendingUnit) &&
 		OpEqu(TextureFiltering) &&
+		OpEqu(Filter2D) &&
 		OpEqu(TexturePreloading) &&
 		OpEqu(GSDumpCompression) &&
 		OpEqu(HWDownloadMode) &&
@@ -1061,6 +1062,7 @@ void Pcsx2Config::GSOptions::LoadSave(SettingsWrapper& wrap)
 	SettingsWrapBitBool(HWROVBarriersVK);
 	SettingsWrapIntEnumEx(AccurateBlendingUnit, "accurate_blending_unit");
 	SettingsWrapIntEnumEx(TextureFiltering, "filter");
+	SettingsWrapIntEnumEx(Filter2D, "Filter2D");
 	SettingsWrapIntEnumEx(TexturePreloading, "texture_preloading");
 	SettingsWrapIntEnumEx(GSDumpCompression, "GSDumpCompression");
 	SettingsWrapIntEnumEx(HWDownloadMode, "HWDownloadMode");

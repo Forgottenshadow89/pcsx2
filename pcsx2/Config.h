@@ -448,6 +448,17 @@ enum class GSBilinearDirtyMode : u8
 	MaxCount
 };
 
+// Filter 2D Images: filtering applied to 2D content that stock PCSX2 leaves as replicated pixels when upscaling
+// (CPU -> render target uploads, native resolution frames, textures used by flat 2D draws). Independent from the
+// Bilinear Dirty Upscale hardware fix.
+enum class GSFilter2DMode : u8
+{
+	Off,
+	Bilinear,
+	xBR,
+	MaxCount
+};
+
 enum class GSHalfPixelOffset : u8
 {
 	Off,
@@ -869,6 +880,7 @@ struct Pcsx2Config
 
 		AccBlendLevel AccurateBlendingUnit = DEFAULT_BLENDING_ACCURACY;
 		BiFiltering TextureFiltering = DEFAULT_TEXTURE_FILTERING_MODE;
+		GSFilter2DMode Filter2D = GSFilter2DMode::Off;
 		TexturePreloadingLevel TexturePreloading = TexturePreloadingLevel::Full;
 		GSDumpCompressionMethod GSDumpCompression = GSDumpCompressionMethod::Zstandard;
 		GSHardwareDownloadMode HWDownloadMode = GSHardwareDownloadMode::Enabled;

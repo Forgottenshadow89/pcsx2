@@ -110,6 +110,7 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 	SettingWidgetBinder::BindWidgetToEnumSetting(sif, m_hw.anisotropicFiltering, "EmuCore/GS", "MaxAnisotropy",
 		s_anisotropic_filtering_entries, s_anisotropic_filtering_values, "0");
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_hw.dithering, "EmuCore/GS", "dithering_ps2", 2);
+	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_hw.filter2D, "EmuCore/GS", "Filter2D", static_cast<int>(GSFilter2DMode::Off));
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_hw.mipmapping, "EmuCore/GS", "hw_mipmap", true);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_hw.accurateAlphaTest, "EmuCore/GS", "HWAccurateAlphaTest", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_hw.hwAA1, "EmuCore/GS", "HWAA1", false);
@@ -516,6 +517,18 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 			   "Bilinear (Forced): Will blend colors together to remove harsh edges between different colored pixels even if the game told the PS2 not to.<br> "
 			   "Bilinear (PS2): Will apply filtering to all surfaces that a game instructs the PS2 to filter.<br> "
 			   "Bilinear (Forced Excluding Sprites): Will apply filtering to all surfaces, even if the game told the PS2 not to, except sprites."));
+
+		dialog()->registerWidgetHelp(
+			m_hw.filter2D, tr("Filter 2D Images"), tr("Off (Default)"),
+			tr("Filters 2D images that stock PCSX2 leaves as blocks of replicated pixels when upscaling: images the game writes "
+			   "directly into video memory (FMVs, pre-rendered backgrounds, software-rendered 2D), frames kept at native resolution "
+			   "by Native Scaling, and the textures used by flat 2D draws (HUDs, menus, sprites), which are also sampled bilinearly "
+			   "even when the game asked for nearest.<br> "
+			   "Off: identical to stock PCSX2.<br> "
+			   "Bilinear: smooths them.<br> "
+			   "xBR: edge-preserving upscaler (Hyllian's xBR) that keeps lines and text sharp; 2D textures are upscaled up to 6x. "
+			   "Never touches 3D geometry, render target sources, GPU palette textures or HD texture replacements.<br> "
+			   "Independent from the Bilinear Dirty Upscale hardware fix. Has no effect at native resolution."));
 
 		dialog()->registerWidgetHelp(m_hw.trilinearFiltering, tr("Trilinear Filtering"), tr("Automatic (Default)"),
 			tr("Reduces blurriness of large textures applied to small, steeply angled surfaces by sampling colors from the two nearest Mipmaps. Requires Mipmapping to be 'on'.<br> "

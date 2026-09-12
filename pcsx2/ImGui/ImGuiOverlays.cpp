@@ -995,6 +995,8 @@ __ri void ImGuiManager::DrawSettingsOverlay(float scale, float margin, float spa
 			APPEND("LDR={} ", static_cast<unsigned>(GSConfig.UserHacks_Limit24BitDepth));
 		if (GSConfig.UserHacks_BilinearHack != GSBilinearDirtyMode::Automatic)
 			APPEND("BLU={} ", static_cast<unsigned>(GSConfig.UserHacks_BilinearHack));
+		if (GSConfig.Filter2D != GSFilter2DMode::Off)
+			APPEND("F2D={} ", static_cast<unsigned>(GSConfig.Filter2D));
 		if (GSConfig.UserHacks_ForceEvenSpritePosition)
 			APPEND("FESP ");
 		if (GSConfig.UserHacks_NativePaletteDraw)

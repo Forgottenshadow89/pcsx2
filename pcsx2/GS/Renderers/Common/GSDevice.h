@@ -66,6 +66,7 @@ enum class ShaderConvert
 	CLUT_4,
 	CLUT_8,
 	YUV,
+	XBR_UPSCALE,
 	Count
 };
 
@@ -131,6 +132,7 @@ static inline constexpr bool HasColorOutput(ShaderConvert shader)
 		case ShaderConvert::CLUT_8:
 		case ShaderConvert::YUV:
 		case ShaderConvert::COLCLIP_RESOLVE:
+		case ShaderConvert::XBR_UPSCALE:
 			return true;
 		default:
 			return false;

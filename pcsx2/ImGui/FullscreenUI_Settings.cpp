@@ -2873,6 +2873,11 @@ void FullscreenUI::DrawGraphicsSettingsPage(SettingsInterface* bsi, bool show_ad
 		FSUI_NSTR("Bilinear (PS2)"),
 		FSUI_NSTR("Bilinear (Forced excluding sprite)"),
 	};
+	static constexpr const char* s_filter_2d_options[] = {
+		FSUI_NSTR("Off (Default)"),
+		FSUI_NSTR("Bilinear"),
+		FSUI_NSTR("xBR"),
+	};
 	static constexpr const char* s_trilinear_options[] = {
 		FSUI_NSTR("Automatic (Default)"),
 		FSUI_NSTR("Off (None)"),
@@ -3083,6 +3088,9 @@ void FullscreenUI::DrawGraphicsSettingsPage(SettingsInterface* bsi, bool show_ad
 		DrawIntListSetting(bsi, FSUI_ICONSTR(ICON_FA_TABLE_CELLS_LARGE, "Trilinear Filtering"),
 			FSUI_CSTR("Selects where trilinear filtering is utilized when rendering textures."), "EmuCore/GS", "TriFilter",
 			static_cast<int>(TriFiltering::Automatic), s_trilinear_options, std::size(s_trilinear_options), true, -1);
+		DrawIntListSetting(bsi, FSUI_ICONSTR(ICON_FA_IMAGE, "Filter 2D Images"),
+			FSUI_CSTR("Filters 2D images that are otherwise left as replicated pixels when upscaling: images written directly to video memory (FMVs, pre-rendered backgrounds), native resolution frames and the textures of flat 2D draws (HUDs, menus, sprites). Off behaves like stock PCSX2."),
+			"EmuCore/GS", "Filter2D", static_cast<int>(GSFilter2DMode::Off), s_filter_2d_options, std::size(s_filter_2d_options), true);
 		DrawStringListSetting(bsi, FSUI_ICONSTR(ICON_FA_EYE_LOW_VISION, "Anisotropic Filtering"),
 			FSUI_CSTR("Reduces texture aliasing at extreme viewing angles."), "EmuCore/GS", "MaxAnisotropy", "0",
 			s_anisotropic_filtering_entries, s_anisotropic_filtering_values, std::size(s_anisotropic_filtering_entries), true);
@@ -6419,6 +6427,11 @@ TRANSLATE_NOOP("FullscreenUI", "24x Native (~8640px/16K UHD)");
 TRANSLATE_NOOP("FullscreenUI", "25x Native (~9000px)");
 TRANSLATE_NOOP("FullscreenUI", "Nearest");
 TRANSLATE_NOOP("FullscreenUI", "Bilinear (Forced)");
+TRANSLATE_NOOP("FullscreenUI", "Filter 2D Images");
+TRANSLATE_NOOP("FullscreenUI", "Filters 2D images that are otherwise left as replicated pixels when upscaling: images written directly to video memory (FMVs, pre-rendered backgrounds), native resolution frames and the textures of flat 2D draws (HUDs, menus, sprites). Off behaves like stock PCSX2.");
+TRANSLATE_NOOP("FullscreenUI", "Off (Default)");
+TRANSLATE_NOOP("FullscreenUI", "Bilinear");
+TRANSLATE_NOOP("FullscreenUI", "xBR");
 TRANSLATE_NOOP("FullscreenUI", "Bilinear (PS2)");
 TRANSLATE_NOOP("FullscreenUI", "Bilinear (Forced excluding sprite)");
 TRANSLATE_NOOP("FullscreenUI", "Off (None)");

@@ -48,13 +48,75 @@ GSRendererHW::~GSRendererHW()
 
 void GSRendererHW::Destroy()
 {
+	ReleaseOutputUpscaleTextures();
 	g_texture_cache->RemoveAll(true, true, true);
 	GSRenderer::Destroy();
 }
 
 void GSRendererHW::PurgeTextureCache(bool sources, bool targets, bool hash_cache)
 {
+	if (targets)
+		ReleaseOutputUpscaleTextures();
 	g_texture_cache->RemoveAll(sources, targets, hash_cache);
+}
+
+void GSRendererHW::ReleaseOutputUpscaleTextures()
+{
+	for (GSTexture*& tex : m_output_upscale_tex)
+	{
+		if (tex)
+		{
+			g_gs_device->Recycle(tex);
+			tex = nullptr;
+		}
+	}
+}
+
+int GSRendererHW::GetTexture2DUpscaleFactor() const
+{
+	if (GSConfig.Filter2D != GSFilter2DMode::xBR)
+		return 0;
+
+	// Up to 6x; never go beyond the internal resolution multiplier, it would only cost memory.
+	return std::min(6, static_cast<int>(GSConfig.UpscaleMultiplier));
+}
+
+GSTexture* GSRendererHW::UpscaleNativeOutput(GSTexture* t, float& scale, u32 slot)
+{
+	// Filter 2D Images (xBR): frames that ended up at native resolution (Native Scaling downscaled targets, e.g. videos
+	// and post-processed frames) would otherwise be presented as blocks of replicated pixels. Upscale them with xBR first.
+	const float upscale = GetUpscaleMultiplier();
+	const int factor = static_cast<int>(upscale);
+	if (!t || GSConfig.Filter2D != GSFilter2DMode::xBR || scale != 1.0f || t->IsDepthLike() ||
+		static_cast<float>(factor) != upscale || factor < 2)
+	{
+		return t;
+	}
+
+	const int width = t->GetWidth() * factor;
+	const int height = t->GetHeight() * factor;
+	const int max_size = static_cast<int>(g_gs_device->GetMaxTextureSize());
+	if (width > max_size || height > max_size)
+		return t;
+
+	GSTexture*& cache = m_output_upscale_tex[slot];
+	if (cache && (cache->GetWidth() != width || cache->GetHeight() != height))
+	{
+		g_gs_device->Recycle(cache);
+		cache = nullptr;
+	}
+	if (!cache)
+	{
+		cache = g_gs_device->CreateRenderTarget(width, height, GSTexture::Format::Color, false);
+		if (!cache)
+			return t;
+	}
+
+	GL_INS("HW: Upscaling native output %dx%d with xBR (slot %u)", t->GetWidth(), t->GetHeight(), slot);
+	g_gs_device->StretchRect(t, GSVector4(0.0f, 0.0f, 1.0f, 1.0f), cache,
+		GSVector4(0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height)), ShaderConvert::XBR_UPSCALE, Nearest);
+	scale = upscale;
+	return cache;
 }
 
 void GSRendererHW::ReadbackTextureCache()
@@ -187,6 +249,8 @@ GSTexture* GSRendererHW::GetOutput(int i, float& scale, int& y_offset)
 		{
 			t->Save(GetDrawDumpPath("%05lld_f%05lld_fr%d_%05x_%s.bmp", s_n, g_perfmon.GetFrame(), i, static_cast<int>(TEX0.TBP0), GSUtil::GetPSMName(TEX0.PSM)));
 		}
+
+		t = UpscaleNativeOutput(t, scale, static_cast<u32>(index));
 	}
 
 	return t;
@@ -213,7 +277,7 @@ GSTexture* GSRendererHW::GetFeedbackOutput(float& scale)
 	if (GSConfig.SaveFrame && GSConfig.ShouldDump(s_n, g_perfmon.GetFrame()))
 		t->Save(GetDrawDumpPath("%05lld_f%05lld_fr%d_%05x_%s.bmp", s_n, g_perfmon.GetFrame(), 3, static_cast<int>(TEX0.TBP0), GSUtil::GetPSMName(TEX0.PSM)));
 
-	return t;
+	return UpscaleNativeOutput(t, scale, 2);
 }
 
 void GSRendererHW::Lines2Sprites()
@@ -7934,11 +7998,30 @@ __ri static constexpr u8 EffectiveClamp(u8 clamp, bool has_region)
 __ri void GSRendererHW::EmulateTextureSampler(const GSTextureCache::Target* rt, const GSTextureCache::Target* ds, GSTextureCache::Source* tex,
 	const TextureMinMaxResult& tmm, GSDevice::RecycledTexture& src_copy)
 {
+	// Filter 2D Images: flat 2D draws are sprites, or triangles/quads with constant depth (HUDs, menus, backgrounds
+	// drawn as textured quads, FMVs drawn as a full screen sprite).
+	const bool is_2d_draw = (m_vt.m_primclass == GS_SPRITE_CLASS) || (m_vt.m_primclass == GS_TRIANGLE_CLASS && m_vt.m_eq.z);
+	const bool filter_2d_draw = GSConfig.Filter2D != GSFilter2DMode::Off && is_2d_draw;
+
 	// don't overwrite the texture when using channel shuffle, but keep the palette
+	GSTexture* upscaled_2d = nullptr;
 	if (!m_channel_shuffle)
 	{
 		m_conf.cb_ps.ChannelShuffleOffset = GSVector2(0, 0);
 		m_conf.tex = tex->m_texture;
+
+		// Filter 2D Images (xBR): flat 2D draws that sample a local memory texture use an xBR-upscaled copy of it, so
+		// HUDs, menus, backgrounds and videos aren't blocks of replicated texels at higher internal resolutions. 3D
+		// geometry, target sources, GPU palette (indexed) textures, mipmapped draws and replacement textures are left
+		// alone. Texture coordinates are normalised by the nominal size, so a larger texture samples correctly without
+		// any other change (same mechanism as HD texture replacements).
+		const int factor_2d = GetTexture2DUpscaleFactor();
+		if (factor_2d >= 2 && is_2d_draw && !tex->m_target && !tex->m_palette && tex->m_from_hash_cache && !IsMipMapDraw())
+		{
+			upscaled_2d = g_texture_cache->GetUpscaled2DTexture(tex, factor_2d);
+			if (upscaled_2d)
+				m_conf.tex = upscaled_2d;
+		}
 	}
 	m_conf.pal = tex->m_palette;
 
@@ -7983,7 +8066,9 @@ __ri void GSRendererHW::EmulateTextureSampler(const GSTextureCache::Target* rt, 
 	const bool can_trilinear = !tex->m_palette && !tex->m_target && !m_conf.ps.shuffle;
 	const bool trilinear_manual = need_mipmap && GSConfig.HWMipmap;
 
-	bool bilinear = m_vt.IsLinear();
+	// Filter 2D Images: flat 2D draws are sampled bilinearly even if the game asked for nearest (like Texture Filtering
+	// "Forced" restricted to 2D). The usual exceptions below (texture shuffles, palette-from-target, depth) still apply.
+	bool bilinear = m_vt.IsLinear() || filter_2d_draw;
 	int trilinear = 0;
 	bool trilinear_auto = false; // Generate mipmaps if needed (basic).
 	switch (GSConfig.TriFilter)
