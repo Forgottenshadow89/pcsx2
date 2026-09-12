@@ -145,6 +145,15 @@ the literal diff: decide `filter_uploads`/`want_xbr` next to the existing `overr
 booleans, grow the read area when xBR is on, upscale `t` into `t_up` after `t->Unmap()`, and point
 the qualifying rects at `t_up` with nearest filtering.
 
+## Verified 2026-09-12 (GS dump replay, `pcsx2.exe -batch -nogui <dump.gs>` + screen capture)
+
+- Dragon Quest VIII intro FMV: 2D Texture Upscaling Off = nearest 6x blocks of the 512x448 video; 4x = xBR-smoothed
+  edges (the MPEG macroblock artifacts of the video itself remain, as expected).
+- Shadow of the Colossus: HUD frame texture xBR-smoothed, 3D character/walls pixel-identical between Off and 4x.
+  The blocky HUD icons in this game were caused by nearest-upscaled DDS files in the HD texture pack
+  (`textures/SCES-53326`), not by the emulator; those files were moved to `replacements_disabled_HUD/`.
+- Useful trick: GS dumps replay with the current settings, so A/B tests of GS options need no game running.
+
 ## Verifying after a rebase
 
 At 4x-6x internal resolution with the filter set to xBR check that: (1) FMVs and pre-rendered
