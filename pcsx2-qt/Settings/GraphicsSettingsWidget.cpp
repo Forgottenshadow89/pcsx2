@@ -110,6 +110,7 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 	SettingWidgetBinder::BindWidgetToEnumSetting(sif, m_hw.anisotropicFiltering, "EmuCore/GS", "MaxAnisotropy",
 		s_anisotropic_filtering_entries, s_anisotropic_filtering_values, "0");
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_hw.dithering, "EmuCore/GS", "dithering_ps2", 2);
+	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_hw.dirtyUploadFilter, "EmuCore/GS", "DirtyUploadFilter", static_cast<int>(GSDirtyUploadFilter::xBR));
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_hw.mipmapping, "EmuCore/GS", "hw_mipmap", true);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_hw.accurateAlphaTest, "EmuCore/GS", "HWAccurateAlphaTest", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_hw.hwAA1, "EmuCore/GS", "HWAA1", false);
@@ -516,6 +517,15 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 			   "Bilinear (Forced): Will blend colors together to remove harsh edges between different colored pixels even if the game told the PS2 not to.<br> "
 			   "Bilinear (PS2): Will apply filtering to all surfaces that a game instructs the PS2 to filter.<br> "
 			   "Bilinear (Forced Excluding Sprites): Will apply filtering to all surfaces, even if the game told the PS2 not to, except sprites."));
+
+		dialog()->registerWidgetHelp(
+			m_hw.dirtyUploadFilter, tr("2D Upload Filter"), tr("xBR (Default)"),
+			tr("Selects how images that the game writes directly into video memory (FMVs, pre-rendered backgrounds, "
+			   "software-rendered 2D, some HUDs) are enlarged when they are copied into the upscaled framebuffer.<br> "
+			   "Nearest: Replicates pixels, so these images stay pixelated at higher internal resolutions (stock PCSX2 behaviour).<br> "
+			   "Bilinear: Smooths them out.<br> "
+			   "xBR: Edge-preserving upscaler that keeps lines and text sharp while removing the blockiness.<br> "
+			   "Has no effect at native resolution, and the Bilinear Dirty Upscale hardware fix (user or GameDB) takes priority when set."));
 
 		dialog()->registerWidgetHelp(m_hw.trilinearFiltering, tr("Trilinear Filtering"), tr("Automatic (Default)"),
 			tr("Reduces blurriness of large textures applied to small, steeply angled surfaces by sampling colors from the two nearest Mipmaps. Requires Mipmapping to be 'on'.<br> "

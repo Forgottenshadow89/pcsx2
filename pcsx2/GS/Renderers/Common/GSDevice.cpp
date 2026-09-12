@@ -56,6 +56,7 @@ const char* ShaderEntryPoint(ShaderConvert value)
 		case ShaderConvert::CLUT_4:                 return "ps_convert_clut_4";
 		case ShaderConvert::CLUT_8:                 return "ps_convert_clut_8";
 		case ShaderConvert::YUV:                    return "ps_yuv";
+		case ShaderConvert::XBR_UPSCALE:            return "ps_xbr_upscale";
 		// clang-format on
 		default:
 			pxAssert(0);
@@ -117,6 +118,7 @@ const char* ShaderConvertName(ShaderConvert shader)
 		ENTRY(CLUT_4);
 		ENTRY(CLUT_8);
 		ENTRY(YUV);
+		ENTRY(XBR_UPSCALE);
 		case ShaderConvert::Count: break;
 	}
 	#undef ENTRY

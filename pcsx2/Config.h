@@ -448,6 +448,16 @@ enum class GSBilinearDirtyMode : u8
 	MaxCount
 };
 
+// Filter applied to CPU -> render target uploads (dirty rects) when upscaling.
+// Only used while UserHacks_BilinearHack is Automatic; GameDB/user overrides win.
+enum class GSDirtyUploadFilter : u8
+{
+	Nearest,
+	Bilinear,
+	xBR,
+	MaxCount
+};
+
 enum class GSHalfPixelOffset : u8
 {
 	Off,
@@ -869,6 +879,7 @@ struct Pcsx2Config
 
 		AccBlendLevel AccurateBlendingUnit = DEFAULT_BLENDING_ACCURACY;
 		BiFiltering TextureFiltering = DEFAULT_TEXTURE_FILTERING_MODE;
+		GSDirtyUploadFilter DirtyUploadFilter = GSDirtyUploadFilter::xBR;
 		TexturePreloadingLevel TexturePreloading = TexturePreloadingLevel::Full;
 		GSDumpCompressionMethod GSDumpCompression = GSDumpCompressionMethod::Zstandard;
 		GSHardwareDownloadMode HWDownloadMode = GSHardwareDownloadMode::Enabled;

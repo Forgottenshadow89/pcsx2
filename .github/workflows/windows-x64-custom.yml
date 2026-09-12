@@ -1,0 +1,25 @@
+name: Windows x64 (Upload Filter)
+
+# Fork-only workflow: builds the Qt frontend for Windows x64 (MSVC, AVX2) for the upload-filter branch.
+# The stock matrix workflows are disabled on the fork to keep the runs down to one job.
+
+on:
+  push:
+    branches:
+      - upload-filter
+  workflow_dispatch:
+
+jobs:
+  build_qt_deps:
+    name: "Dependencies"
+    uses: ./.github/workflows/windows_deps_build.yml
+
+  build_qt_avx2:
+    needs: build_qt_deps
+    name: "AVX2"
+    uses: ./.github/workflows/windows_build_qt.yml
+    with:
+      jobName: "MSVC AVX2"
+      artifactPrefixName: "PCSX2-windows-Qt-x64-avx2-msvc-upload-filter"
+      configuration: Release AVX2
+    secrets: inherit
