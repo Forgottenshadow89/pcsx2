@@ -2873,6 +2873,13 @@ void FullscreenUI::DrawGraphicsSettingsPage(SettingsInterface* bsi, bool show_ad
 		FSUI_NSTR("Bilinear (PS2)"),
 		FSUI_NSTR("Bilinear (Forced excluding sprite)"),
 	};
+	static constexpr const char* s_texture_2d_upscale_options[] = {
+		FSUI_NSTR("Off"),
+		FSUI_NSTR("2x"),
+		FSUI_NSTR("3x"),
+		FSUI_NSTR("4x (Default)"),
+		FSUI_NSTR("6x"),
+	};
 	static constexpr const char* s_dirty_upload_filter_options[] = {
 		FSUI_NSTR("Nearest (PCSX2 Default)"),
 		FSUI_NSTR("Bilinear"),
@@ -3092,6 +3099,10 @@ void FullscreenUI::DrawGraphicsSettingsPage(SettingsInterface* bsi, bool show_ad
 			FSUI_CSTR("Selects how images written directly to video memory (FMVs, pre-rendered backgrounds, software-rendered 2D) are enlarged when upscaling."),
 			"EmuCore/GS", "DirtyUploadFilter", static_cast<int>(GSDirtyUploadFilter::xBR), s_dirty_upload_filter_options,
 			std::size(s_dirty_upload_filter_options), true);
+		DrawIntListSetting(bsi, FSUI_ICONSTR(ICON_FA_TABLE_CELLS_LARGE, "2D Texture Upscaling (xBR)"),
+			FSUI_CSTR("Upscales textures used by flat 2D draws (HUDs, menus, backgrounds, videos) with xBR. 3D geometry is not affected."),
+			"EmuCore/GS", "Texture2DUpscale", static_cast<int>(GSTexture2DUpscale::x4), s_texture_2d_upscale_options,
+			std::size(s_texture_2d_upscale_options), true);
 		DrawStringListSetting(bsi, FSUI_ICONSTR(ICON_FA_EYE_LOW_VISION, "Anisotropic Filtering"),
 			FSUI_CSTR("Reduces texture aliasing at extreme viewing angles."), "EmuCore/GS", "MaxAnisotropy", "0",
 			s_anisotropic_filtering_entries, s_anisotropic_filtering_values, std::size(s_anisotropic_filtering_entries), true);
@@ -6433,6 +6444,12 @@ TRANSLATE_NOOP("FullscreenUI", "Selects how images written directly to video mem
 TRANSLATE_NOOP("FullscreenUI", "Nearest (PCSX2 Default)");
 TRANSLATE_NOOP("FullscreenUI", "Bilinear");
 TRANSLATE_NOOP("FullscreenUI", "xBR (Default)");
+TRANSLATE_NOOP("FullscreenUI", "2D Texture Upscaling (xBR)");
+TRANSLATE_NOOP("FullscreenUI", "Upscales textures used by flat 2D draws (HUDs, menus, backgrounds, videos) with xBR. 3D geometry is not affected.");
+TRANSLATE_NOOP("FullscreenUI", "2x");
+TRANSLATE_NOOP("FullscreenUI", "3x");
+TRANSLATE_NOOP("FullscreenUI", "4x (Default)");
+TRANSLATE_NOOP("FullscreenUI", "6x");
 TRANSLATE_NOOP("FullscreenUI", "Bilinear (PS2)");
 TRANSLATE_NOOP("FullscreenUI", "Bilinear (Forced excluding sprite)");
 TRANSLATE_NOOP("FullscreenUI", "Off (None)");

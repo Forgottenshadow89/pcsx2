@@ -458,6 +458,18 @@ enum class GSDirtyUploadFilter : u8
 	MaxCount
 };
 
+// xBR upscale factor applied to local memory textures used by flat 2D draws (sprites, HUDs, videos).
+// Capped by the internal resolution multiplier; 3D geometry, targets and replacement textures are untouched.
+enum class GSTexture2DUpscale : u8
+{
+	Off,
+	x2,
+	x3,
+	x4,
+	x6,
+	MaxCount
+};
+
 enum class GSHalfPixelOffset : u8
 {
 	Off,
@@ -880,6 +892,7 @@ struct Pcsx2Config
 		AccBlendLevel AccurateBlendingUnit = DEFAULT_BLENDING_ACCURACY;
 		BiFiltering TextureFiltering = DEFAULT_TEXTURE_FILTERING_MODE;
 		GSDirtyUploadFilter DirtyUploadFilter = GSDirtyUploadFilter::xBR;
+		GSTexture2DUpscale Texture2DUpscale = GSTexture2DUpscale::x4;
 		TexturePreloadingLevel TexturePreloading = TexturePreloadingLevel::Full;
 		GSDumpCompressionMethod GSDumpCompression = GSDumpCompressionMethod::Zstandard;
 		GSHardwareDownloadMode HWDownloadMode = GSHardwareDownloadMode::Enabled;

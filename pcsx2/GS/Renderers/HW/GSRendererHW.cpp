@@ -72,6 +72,15 @@ void GSRendererHW::ReleaseOutputUpscaleTextures()
 	}
 }
 
+int GSRendererHW::GetTexture2DUpscaleFactor() const
+{
+	static constexpr int factors[] = {0, 2, 3, 4, 6};
+	const u32 index = std::min<u32>(static_cast<u32>(GSConfig.Texture2DUpscale), static_cast<u32>(std::size(factors) - 1));
+	// Never upscale textures beyond the internal resolution multiplier, it would only cost memory.
+	const int max_factor = static_cast<int>(GSConfig.UpscaleMultiplier);
+	return std::min(factors[index], max_factor);
+}
+
 GSTexture* GSRendererHW::UpscaleNativeOutput(GSTexture* t, float& scale, u32 slot)
 {
 	// 2D Upload Filter: frames that ended up at native resolution (Native Scaling downscaled targets, e.g. videos and
@@ -7990,10 +7999,29 @@ __ri void GSRendererHW::EmulateTextureSampler(const GSTextureCache::Target* rt, 
 	const TextureMinMaxResult& tmm, GSDevice::RecycledTexture& src_copy)
 {
 	// don't overwrite the texture when using channel shuffle, but keep the palette
+	GSTexture* upscaled_2d = nullptr;
 	if (!m_channel_shuffle)
 	{
 		m_conf.cb_ps.ChannelShuffleOffset = GSVector2(0, 0);
 		m_conf.tex = tex->m_texture;
+
+		// 2D Texture Upscaling: flat 2D draws (sprites, constant depth triangles/quads) that sample a local memory texture
+		// use an xBR-upscaled copy of it, so HUDs, menus, backgrounds and videos aren't blocks of replicated texels at
+		// higher internal resolutions. 3D geometry, target sources, GPU palette (indexed) textures, mipmapped draws and
+		// replacement textures are left alone. The texture coordinates are normalised by the nominal size, so a larger
+		// texture samples correctly without any other change (same mechanism as HD texture replacements).
+		const int factor_2d = GetTexture2DUpscaleFactor();
+		if (factor_2d >= 2 && !tex->m_target && !tex->m_palette && tex->m_from_hash_cache && !IsMipMapDraw())
+		{
+			const bool is_2d_draw = (m_vt.m_primclass == GS_SPRITE_CLASS) ||
+			                        (m_vt.m_primclass == GS_TRIANGLE_CLASS && m_vt.m_eq.z);
+			if (is_2d_draw)
+			{
+				upscaled_2d = g_texture_cache->GetUpscaled2DTexture(tex, factor_2d);
+				if (upscaled_2d)
+					m_conf.tex = upscaled_2d;
+			}
+		}
 	}
 	m_conf.pal = tex->m_palette;
 
@@ -8038,7 +8066,8 @@ __ri void GSRendererHW::EmulateTextureSampler(const GSTextureCache::Target* rt, 
 	const bool can_trilinear = !tex->m_palette && !tex->m_target && !m_conf.ps.shuffle;
 	const bool trilinear_manual = need_mipmap && GSConfig.HWMipmap;
 
-	bool bilinear = m_vt.IsLinear();
+	// An xBR-upscaled 2D texture is always sampled bilinearly, nearest would just show the upscaled texels as blocks.
+	bool bilinear = m_vt.IsLinear() || (upscaled_2d != nullptr);
 	int trilinear = 0;
 	bool trilinear_auto = false; // Generate mipmaps if needed (basic).
 	switch (GSConfig.TriFilter)

@@ -133,6 +133,9 @@ public:
 		std::pair<u8, u8> alpha_minmax;
 		bool valid_alpha_minmax;
 		bool is_replacement;
+		// 2D Texture Upscaling: lazily created xBR-upscaled copy of texture, used by flat 2D draws.
+		GSTexture* upscaled = nullptr;
+		u8 upscaled_factor = 0;
 	};
 
 	using HashCacheMap = std::unordered_map<HashCacheKey, HashCacheEntry, HashCacheKeyHash>;
@@ -516,6 +519,11 @@ public:
 	void RemoveAll(bool sources, bool targets, bool hash_cache);
 	void ReadbackAll();
 	static void AddDirtyRectTarget(Target* target, GSVector4i rect, u32 psm, u32 bw, RGBAMask rgba, bool req_linear = false);
+
+	/// 2D Texture Upscaling: returns (creating on first use) the xBR-upscaled copy of a hash cache texture, or nullptr
+	/// when the source can't be upscaled (targets, indexed/paletted, mipmapped, replacement or oversized textures).
+	GSTexture* GetUpscaled2DTexture(Source* src, int factor);
+	void ReleaseUpscaled2DTexture(HashCacheEntry& entry);
 	void ResizeTarget(Target* t, GSVector4i rect, u32 tbp, u32 psm, u32 tbw);
 	static bool FullRectDirty(Target* target, u32 rgba_mask);
 	static bool FullRectDirty(Target* target);

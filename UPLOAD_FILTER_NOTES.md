@@ -87,6 +87,25 @@ xBR there when the filter is set to xBR and the upscale factor is an integer >= 
 Note this also runs xBR over 3D content that was rendered at native resolution because of Native Scaling;
 set the filter to Nearest/Bilinear per game if that is unwanted.
 
+### 2D Texture Upscaling (third commit)
+
+The GS dumps of Dragon Quest VIII (intro video: 512x448 IPU frame uploaded as 16x16 macroblocks and drawn as one
+1:1 full screen sprite) and Shadow of the Colossus (HUD: 4bpp textures drawn as sprites/triangle strips) showed
+that most "pixelated 2D" is simply the normal texture -> sprite path, which none of the above touches.
+
+New setting `EmuCore/GS/Texture2DUpscale` (enum `GSTexture2DUpscale`: Off, 2x, 3x, 4x, 6x; **default 4x**),
+*2D Texture Upscaling (xBR)* in Graphics → Rendering:
+
+- `HashCacheEntry` gains `upscaled` / `upscaled_factor`; `GSTextureCache::GetUpscaled2DTexture()` lazily runs
+  `XBR_UPSCALE` over the cached RGBA texture (never replacement, indexed/UNorm8 or mipmapped textures), bounded by
+  the device limit, 4096 and a 4M pixel (16MB) budget, released with the entry, on `RemoveAll` and when a
+  replacement texture is injected.
+- `GSRendererHW::EmulateTextureSampler()` swaps `m_conf.tex` for the upscaled copy when the draw is flat 2D
+  (`GS_SPRITE_CLASS`, or `GS_TRIANGLE_CLASS` with constant Z) and the source is a local memory, non-palette,
+  hash cached texture, and forces bilinear sampling for it. Texture coordinates are normalised by the nominal
+  size, so the larger texture needs no other change (same mechanism HD texture replacements rely on).
+- Factor is capped by the internal resolution multiplier (`GetTexture2DUpscaleFactor()`).
+
 ### Files touched (conflict hotspots for rebases)
 
 - `pcsx2/GS/Renderers/HW/GSTextureCache.cpp` — `Target::Update()` (filter decision, context read, xBR

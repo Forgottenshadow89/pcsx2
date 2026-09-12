@@ -833,6 +833,7 @@ bool Pcsx2Config::GSOptions::OptionsAreEqual(const GSOptions& right) const
 		OpEqu(AccurateBlendingUnit) &&
 		OpEqu(TextureFiltering) &&
 		OpEqu(DirtyUploadFilter) &&
+		OpEqu(Texture2DUpscale) &&
 		OpEqu(TexturePreloading) &&
 		OpEqu(GSDumpCompression) &&
 		OpEqu(HWDownloadMode) &&
@@ -1063,6 +1064,7 @@ void Pcsx2Config::GSOptions::LoadSave(SettingsWrapper& wrap)
 	SettingsWrapIntEnumEx(AccurateBlendingUnit, "accurate_blending_unit");
 	SettingsWrapIntEnumEx(TextureFiltering, "filter");
 	SettingsWrapIntEnumEx(DirtyUploadFilter, "DirtyUploadFilter");
+	SettingsWrapIntEnumEx(Texture2DUpscale, "Texture2DUpscale");
 	SettingsWrapIntEnumEx(TexturePreloading, "texture_preloading");
 	SettingsWrapIntEnumEx(GSDumpCompression, "GSDumpCompression");
 	SettingsWrapIntEnumEx(HWDownloadMode, "HWDownloadMode");

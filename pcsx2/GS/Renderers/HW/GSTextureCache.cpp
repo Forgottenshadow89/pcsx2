@@ -104,7 +104,11 @@ void GSTextureCache::RemoveAll(bool sources, bool targets, bool hash_cache)
 	if (hash_cache)
 	{
 		for (auto it : m_hash_cache)
+		{
+			if (it.second.upscaled)
+				g_gs_device->Recycle(it.second.upscaled);
 			g_gs_device->Recycle(it.second.texture);
+		}
 
 		m_hash_cache.clear();
 		m_hash_cache_memory_usage = 0;
@@ -7172,9 +7176,63 @@ GSTextureCache::HashCacheEntry* GSTextureCache::LookupHashCache(const GIFRegTEX0
 	return &m_hash_cache.emplace(key, entry).first->second;
 }
 
+void GSTextureCache::ReleaseUpscaled2DTexture(HashCacheEntry& entry)
+{
+	if (!entry.upscaled)
+		return;
+
+	m_hash_cache_memory_usage -= entry.upscaled->GetMemUsage();
+	g_gs_device->Recycle(entry.upscaled);
+	entry.upscaled = nullptr;
+	entry.upscaled_factor = 0;
+}
+
+GSTexture* GSTextureCache::GetUpscaled2DTexture(Source* src, int factor)
+{
+	HashCacheEntry* entry = src->m_from_hash_cache;
+	if (!entry || entry->is_replacement || factor < 2 || !entry->texture ||
+		entry->texture->GetFormat() != GSTexture::Format::Color || entry->texture->GetMipmapLevels() > 1)
+	{
+		return nullptr;
+	}
+
+	// Keep the output bounded: 4M pixels (16MB) per texture, and never above the device limit. Bigger textures get a
+	// smaller factor, the sampler's bilinear filter covers the rest of the way to the internal resolution.
+	const int tw = entry->texture->GetWidth();
+	const int th = entry->texture->GetHeight();
+	const int max_size = std::min<int>(static_cast<int>(g_gs_device->GetMaxTextureSize()), 4096);
+	constexpr int max_pixels = 4 * 1024 * 1024;
+	int f = factor;
+	while (f >= 2 && (tw * f > max_size || th * f > max_size || (tw * f) * (th * f) > max_pixels))
+		f--;
+	if (f < 2)
+		return nullptr;
+
+	if (entry->upscaled && entry->upscaled_factor == f)
+		return entry->upscaled;
+
+	ReleaseUpscaled2DTexture(*entry);
+
+	const int w = tw * f;
+	const int h = th * f;
+	GSTexture* up = g_gs_device->CreateRenderTarget(w, h, GSTexture::Format::Color, false);
+	if (!up)
+		return nullptr;
+
+	GL_INS("TC: 2D texture upscale %dx%d -> %dx%d (xBR %dx)", tw, th, w, h, f);
+	g_gs_device->StretchRect(entry->texture, GSVector4(0.0f, 0.0f, 1.0f, 1.0f), up,
+		GSVector4(0.0f, 0.0f, static_cast<float>(w), static_cast<float>(h)), ShaderConvert::XBR_UPSCALE, Nearest);
+
+	entry->upscaled = up;
+	entry->upscaled_factor = static_cast<u8>(f);
+	m_hash_cache_memory_usage += up->GetMemUsage();
+	return up;
+}
+
 GSTextureCache::HashCacheMap::iterator GSTextureCache::RemoveFromHashCache(HashCacheMap::iterator it)
 {
 	HashCacheEntry& e = it->second;
+	ReleaseUpscaled2DTexture(e);
 	const u32 mem_usage = e.texture->GetMemUsage();
 	if (e.is_replacement)
 		m_hash_cache_replacement_memory_usage -= mem_usage;
@@ -8764,6 +8822,7 @@ void GSTextureCache::InjectHashCacheTexture(const HashCacheKey& key, GSTexture* 
 		m_hash_cache_replacement_memory_usage -= it->second.texture->GetMemUsage();
 
 	it->second.is_replacement = true;
+	ReleaseUpscaled2DTexture(it->second);
 	m_src.SwapTexture(it->second.texture, tex);
 	g_gs_device->Recycle(it->second.texture);
 	it->second.texture = tex;

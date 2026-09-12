@@ -379,6 +379,8 @@ public:
 	GSTexture* GetFeedbackOutput(float& scale) override;
 	/// 2D Upload Filter: xBR-upscales a native resolution output target before it is merged/presented.
 	GSTexture* UpscaleNativeOutput(GSTexture* t, float& scale, u32 slot);
+	/// 2D Texture Upscaling: xBR factor for local memory textures used by flat 2D draws (0 = off).
+	int GetTexture2DUpscaleFactor() const;
 	void ReleaseOutputUpscaleTextures();
 	void InvalidateVideoMem(const GIFRegBITBLTBUF& BITBLTBUF, const GSVector4i& r) override;
 	void InvalidateLocalMem(const GIFRegBITBLTBUF& BITBLTBUF, const GSVector4i& r, bool clut = false) override;

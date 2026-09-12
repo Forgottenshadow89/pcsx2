@@ -997,6 +997,8 @@ __ri void ImGuiManager::DrawSettingsOverlay(float scale, float margin, float spa
 			APPEND("BLU={} ", static_cast<unsigned>(GSConfig.UserHacks_BilinearHack));
 		if (GSConfig.DirtyUploadFilter != GSDirtyUploadFilter::Nearest)
 			APPEND("UPF={} ", static_cast<unsigned>(GSConfig.DirtyUploadFilter));
+		if (GSConfig.Texture2DUpscale != GSTexture2DUpscale::Off)
+			APPEND("T2D={} ", static_cast<unsigned>(GSConfig.Texture2DUpscale));
 		if (GSConfig.UserHacks_ForceEvenSpritePosition)
 			APPEND("FESP ");
 		if (GSConfig.UserHacks_NativePaletteDraw)

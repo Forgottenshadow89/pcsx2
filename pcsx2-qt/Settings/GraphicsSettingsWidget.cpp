@@ -111,6 +111,7 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 		s_anisotropic_filtering_entries, s_anisotropic_filtering_values, "0");
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_hw.dithering, "EmuCore/GS", "dithering_ps2", 2);
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_hw.dirtyUploadFilter, "EmuCore/GS", "DirtyUploadFilter", static_cast<int>(GSDirtyUploadFilter::xBR));
+	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_hw.texture2DUpscale, "EmuCore/GS", "Texture2DUpscale", static_cast<int>(GSTexture2DUpscale::x4));
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_hw.mipmapping, "EmuCore/GS", "hw_mipmap", true);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_hw.accurateAlphaTest, "EmuCore/GS", "HWAccurateAlphaTest", false);
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_hw.hwAA1, "EmuCore/GS", "HWAA1", false);
@@ -526,6 +527,15 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 			   "Bilinear: Smooths them out.<br> "
 			   "xBR: Edge-preserving upscaler that keeps lines and text sharp while removing the blockiness.<br> "
 			   "Has no effect at native resolution, and the Bilinear Dirty Upscale hardware fix (user or GameDB) takes priority when set."));
+
+		dialog()->registerWidgetHelp(
+			m_hw.texture2DUpscale, tr("2D Texture Upscaling (xBR)"), tr("4x (Default)"),
+			tr("Upscales the textures used by flat 2D draws (sprites, HUDs, menus, pre-rendered backgrounds, videos) with the xBR "
+			   "filter before they are drawn, so they keep clean edges at higher internal resolutions instead of becoming blocks of "
+			   "replicated texels.<br> "
+			   "Only affects 2D draws (sprites and constant-depth polygons) sampling normal textures: 3D geometry, render target "
+			   "sources, GPU palette textures and HD texture replacements are never touched.<br> "
+			   "The factor is capped by the internal resolution multiplier and by a 16MB per-texture budget."));
 
 		dialog()->registerWidgetHelp(m_hw.trilinearFiltering, tr("Trilinear Filtering"), tr("Automatic (Default)"),
 			tr("Reduces blurriness of large textures applied to small, steeply angled surfaces by sampling colors from the two nearest Mipmaps. Requires Mipmapping to be 'on'.<br> "
