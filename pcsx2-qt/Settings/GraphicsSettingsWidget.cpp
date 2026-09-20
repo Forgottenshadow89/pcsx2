@@ -108,7 +108,7 @@ GraphicsSettingsWidget::GraphicsSettingsWidget(SettingsWindow* settings_dialog, 
 	SettingWidgetBinder::BindWidgetToIntSetting(
 		sif, m_hw.trilinearFiltering, "EmuCore/GS", "TriFilter", static_cast<int>(TriFiltering::Automatic), -1);
 	SettingWidgetBinder::BindWidgetToEnumSetting(sif, m_hw.anisotropicFiltering, "EmuCore/GS", "MaxAnisotropy",
-		s_anisotropic_filtering_entries, s_anisotropic_filtering_values, "0");
+		s_anisotropic_filtering_entries, s_anisotropic_filtering_values, "0", "GraphicsSettingsWidget");
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_hw.dithering, "EmuCore/GS", "dithering_ps2", 2);
 	SettingWidgetBinder::BindWidgetToIntSetting(sif, m_hw.filter2D, "EmuCore/GS", "Filter2D", static_cast<int>(GSFilter2DMode::Off));
 	SettingWidgetBinder::BindWidgetToBoolSetting(sif, m_hw.mipmapping, "EmuCore/GS", "hw_mipmap", true);
